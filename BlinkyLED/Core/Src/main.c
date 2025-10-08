@@ -49,7 +49,9 @@ SPI_HandleTypeDef hspi1;
 
 /* USER CODE BEGIN PV */
 CAN_TxHeaderTypeDef   TxHeader;
+CAN_RxHeaderTypeDef   RxHeader;
 uint8_t               TxData[2];
+uint8_t               RxData[8];
 uint32_t              TxMailbox;
 /* USER CODE END PV */
 
@@ -121,6 +123,31 @@ int main(void)
   {
     /* Start Error */
     Error_Handler();
+  }
+
+  // --- TAMBAHKAN SELURUH BLOK DI BAWAH INI ---
+  CAN_FilterTypeDef canfilterconfig;
+
+  canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
+  canfilterconfig.FilterBank = 0;
+  canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
+  canfilterconfig.FilterIdHigh = 0x0000;
+  canfilterconfig.FilterIdLow = 0x0000;
+  canfilterconfig.FilterMaskIdHigh = 0x0000;
+  canfilterconfig.FilterMaskIdLow = 0x0000;
+  canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
+  canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
+  canfilterconfig.SlaveStartFilterBank = 14;
+
+  if (HAL_CAN_ConfigFilter(&hcan1, &canfilterconfig) != HAL_OK)
+  {
+	  Error_Handler();
+  }
+
+  // Aktifkan Notifikasi Interrupt CAN RX FIFO0 (Pesan Masuk)
+  if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
+  {
+	  Error_Handler();
   }
   /* USER CODE END 2 */
 
@@ -410,7 +437,19 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
+{
+  // Ambil pesan yang masuk dari buffer FIFO0
+  if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
+  {
+    // Verifikasi sederhana: Jika pesan yang diterima memiliki ID Standar 0x123
+    if (RxHeader.StdId == 0x123)
+    {
+      // Bukti visual: Nyalakan LED Hijau (PD12) secara permanen
+      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /**
