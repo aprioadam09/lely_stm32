@@ -8,17 +8,7 @@
 #ifndef BSP_CAN_H_
 #define BSP_CAN_H_
 
-#include <stddef.h> // For size_t
-#include <stdint.h> // For uint32_t, uint8_t
-
-// A temporary placeholder for the Lely CANopen message struct.
-// This allows our driver to be compiled independently of the Lely stack.
-struct can_msg {
-    uint32_t id;
-    uint8_t flags;
-    uint8_t len;
-    uint8_t data[8];
-};
+#include <lely/can/msg.h>
 
 #ifdef __cplusplus
 extern "C" {
