@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "can.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,11 +48,7 @@ I2S_HandleTypeDef hi2s3;
 SPI_HandleTypeDef hspi1;
 
 /* USER CODE BEGIN PV */
-CAN_TxHeaderTypeDef   TxHeader;
-CAN_RxHeaderTypeDef   RxHeader;
-uint8_t               TxData[2];
-uint8_t               RxData[8];
-uint32_t              TxMailbox;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,50 +101,9 @@ int main(void)
   MX_SPI1_Init();
   MX_USB_HOST_Init();
   MX_CAN1_Init();
+
   /* USER CODE BEGIN 2 */
-  // Konfigurasi Header Pesan CAN
-  TxHeader.StdId = 0x401; // ID Pesan CAN (pilih angka apa saja)
-  TxHeader.ExtId = 0;
-  TxHeader.RTR = CAN_RTR_DATA;
-  TxHeader.IDE = CAN_ID_STD;
-  TxHeader.DLC = 2; // Jumlah data yang dikirim (dalam byte)
-  TxHeader.TransmitGlobalTime = DISABLE;
-
-  // Data yang akan dikirim
-  TxData[0] = 0xCA;
-  TxData[1] = 0xFE;
-
-  // Mulai periferal CAN
-  if (HAL_CAN_Start(&hcan1) != HAL_OK)
-  {
-    /* Start Error */
-    Error_Handler();
-  }
-
-  // --- TAMBAHKAN SELURUH BLOK DI BAWAH INI ---
-  CAN_FilterTypeDef canfilterconfig;
-
-  canfilterconfig.FilterActivation = CAN_FILTER_ENABLE;
-  canfilterconfig.FilterBank = 0;
-  canfilterconfig.FilterFIFOAssignment = CAN_RX_FIFO0;
-  canfilterconfig.FilterIdHigh = 0x0000;
-  canfilterconfig.FilterIdLow = 0x0000;
-  canfilterconfig.FilterMaskIdHigh = 0x0000;
-  canfilterconfig.FilterMaskIdLow = 0x0000;
-  canfilterconfig.FilterMode = CAN_FILTERMODE_IDMASK;
-  canfilterconfig.FilterScale = CAN_FILTERSCALE_32BIT;
-  canfilterconfig.SlaveStartFilterBank = 14;
-
-  if (HAL_CAN_ConfigFilter(&hcan1, &canfilterconfig) != HAL_OK)
-  {
-	  Error_Handler();
-  }
-
-  // Aktifkan Notifikasi Interrupt CAN RX FIFO0 (Pesan Masuk)
-  if (HAL_CAN_ActivateNotification(&hcan1, CAN_IT_RX_FIFO0_MSG_PENDING) != HAL_OK)
-  {
-	  Error_Handler();
-  }
+  can_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -159,19 +114,16 @@ int main(void)
     MX_USB_HOST_Process();
 
     /* USER CODE BEGIN 3 */
-    // Periksa apakah tombol biru (B1, terhubung ke PA0) sedang ditekan
-    if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) // Tombol ditekan = pin LOW (RESET)
-    {
-      // Kirim pesan CAN
-      if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, TxData, &TxMailbox) == HAL_OK)
-      {
-        // Jika berhasil, kedipkan LED oranye sebagai feedback
-        HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13); // LD3 Orange LED
-      }
-
-      // Tahan di sini selama tombol masih ditekan untuk mencegah spam
-      while (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {}
-    }
+    // --- Test Reception using our new driver ---
+	struct can_msg rx_msg;
+	if (can_recv(&rx_msg, 1) > 0)
+	{
+		if (rx_msg.id == 0x123)
+		{
+			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
+		}
+	}
+	// NOTE: Transmission logic is removed for this commit.
   }
   /* USER CODE END 3 */
 }
@@ -437,19 +389,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
-{
-  // Ambil pesan yang masuk dari buffer FIFO0
-  if (HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &RxHeader, RxData) == HAL_OK)
-  {
-    // Verifikasi sederhana: Jika pesan yang diterima memiliki ID Standar 0x123
-    if (RxHeader.StdId == 0x123)
-    {
-      // Bukti visual: Nyalakan LED Hijau (PD12) secara permanen
-      HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
-    }
-  }
-}
+
 /* USER CODE END 4 */
 
 /**
