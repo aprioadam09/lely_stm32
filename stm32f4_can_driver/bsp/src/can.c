@@ -14,10 +14,16 @@
 static struct can_msg rx_buffer[CAN_RX_BUFFER_SIZE];
 static volatile uint32_t rx_head = 0;
 static volatile uint32_t rx_tail = 0;
+// --- Transmission Variables (now local to this file) ---
+static CAN_TxHeaderTypeDef   TxHeader;
+static uint32_t              TxMailbox;
 
 // The HAL CAN handle is defined in main.c, so we declare it as extern.
 extern CAN_HandleTypeDef hcan1;
 
+/**
+ * @brief Initializes the custom CAN driver layer.
+ */
 void can_init(void)
 {
     // 1. Configure the CAN filter to accept all standard IDs.
@@ -50,11 +56,20 @@ void can_init(void)
     }
 }
 
+/**
+ * @brief De-initializes the custom CAN driver layer.
+ */
 void can_fini(void)
 {
     HAL_CAN_DeInit(&hcan1);
 }
 
+/**
+ * @brief Receives up to n CAN messages from the receive buffer.
+ * @param ptr   A pointer to an array of can_msg structs to be filled.
+ * @param n     The maximum number of messages to receive.
+ * @return      The number of messages actually received.
+ */
 size_t can_recv(struct can_msg *ptr, size_t n)
 {
     size_t count = 0;
@@ -72,16 +87,34 @@ size_t can_recv(struct can_msg *ptr, size_t n)
     return count;
 }
 
-// NOTE: This function is left empty for this commit.
+/**
+ * @brief Sends up to n CAN messages to the bus.
+ * @param ptr   A pointer to an array of can_msg structs to be sent.
+ * @param n     The number of messages to send.
+ * @return      The number of messages successfully queued for transmission.
+ */
 size_t can_send(const struct can_msg *ptr, size_t n)
 {
-    (void)ptr;
-    (void)n;
-    return 0;
+	if (n == 0 || ptr == NULL) {
+	        return 0;
+	    }
+	    TxHeader.StdId = ptr->id;
+	    TxHeader.ExtId = 0;
+	    TxHeader.RTR = CAN_RTR_DATA;
+	    TxHeader.IDE = CAN_ID_STD;
+	    TxHeader.DLC = ptr->len;
+	    TxHeader.TransmitGlobalTime = DISABLE;
+	    while (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 0);
+	    if (HAL_CAN_AddTxMessage(&hcan1, &TxHeader, (uint8_t*)ptr->data, &TxMailbox) == HAL_OK) {
+	        return 1;
+	    }
+	    return 0;
 }
 
-// This HAL callback is automatically called by the HAL_CAN_IRQHandler
-// when a message is pending in FIFO0.
+/**
+ * @brief This is the interrupt callback function executed when a message arrives.
+ *        It is called by the HAL driver.
+ */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
     CAN_RxHeaderTypeDef rx_header;

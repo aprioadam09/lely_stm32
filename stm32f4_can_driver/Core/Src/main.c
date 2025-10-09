@@ -123,7 +123,20 @@ int main(void)
 			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, GPIO_PIN_SET);
 		}
 	}
-	// NOTE: Transmission logic is removed for this commit.
+
+	// --- Test Transmission using our new driver ---
+	if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET)
+	{
+		struct can_msg tx_msg;
+		tx_msg.id = 0x401;
+		tx_msg.len = 2;
+		tx_msg.data[0] = 0xCA;
+		tx_msg.data[1] = 0xFE;
+		if (can_send(&tx_msg, 1) > 0) {
+			HAL_GPIO_TogglePin(GPIOD, GPIO_PIN_13);
+		}
+		while (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_RESET) {}
+	}
   }
   /* USER CODE END 3 */
 }
