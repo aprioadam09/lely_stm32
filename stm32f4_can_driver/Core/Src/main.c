@@ -26,6 +26,7 @@
 #include <lely/co/dev.h>
 #include <lely/can/net.h>
 #include <lely/co/nmt.h>
+#include <lely/co/sdo.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,6 +57,11 @@ static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
 /* USER CODE BEGIN PFP */
 static int on_can_send(const struct can_msg *msg, void *data);
+static co_unsigned32_t on_dn_2000_00(co_sub_t *sub, struct co_sdo_req *req,
+		void *data);
+static co_unsigned32_t on_up_2001_00(const co_sub_t *sub,
+		struct co_sdo_req *req, void *data);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -114,6 +120,10 @@ int main(void)
 
   // Start the NMT service by resetting the node (triggers boot-up message).
   co_nmt_cs_ind(nmt, CO_NMT_CS_RESET_NODE);
+
+  // Register our custom functions to be called on SDO access to specific objects.
+  co_sub_set_dn_ind(co_dev_find_sub(dev, 0x2000, 0x00), &on_dn_2000_00, NULL);
+  co_sub_set_up_ind(co_dev_find_sub(dev, 0x2001, 0x00), &on_up_2001_00, NULL);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -369,6 +379,54 @@ static int on_can_send(const struct can_msg *msg, void *data)
 {
 	(void)data; // Suppress unused parameter warning
 	return (can_send(msg, 1) == 1) ? 0 : -1;
+}
+
+/**
+ * @brief Custom SDO download (write) indication function for object 0x2000.
+ * @note This function mirrors the implementation in the LPC17xx reference project.
+ *       It only accepts the value 42 and returns a parameter error otherwise.
+ */
+static co_unsigned32_t on_dn_2000_00(co_sub_t *sub, struct co_sdo_req *req, void *data)
+{
+	(void)data;
+
+	co_unsigned32_t ac = 0;
+	co_unsigned16_t type = co_sub_get_type(sub);
+	union co_val val;
+
+	if (co_sdo_req_dn_val(req, type, &val, &ac) == -1)
+		return ac;
+
+	// Check if the received value is valid.
+	if (val.u32 != 42) {
+		ac = CO_SDO_AC_PARAM;
+		goto error;
+	}
+
+	// Write the value to the local object dictionary.
+	co_sub_dn(sub, &val);
+
+error:
+	co_val_fini(type, &val);
+	return ac;
+}
+
+/**
+ * @brief Custom SDO upload (read) indication function for object 0x2001.
+ * @note This function mirrors the implementation in the LPC17xx reference project.
+ *       It always returns the static value 42.
+ */
+static co_unsigned32_t on_up_2001_00(const co_sub_t *sub, struct co_sdo_req *req, void *data)
+{
+	(void)sub;
+	(void)data;
+
+	co_unsigned16_t type = CO_DEFTYPE_UNSIGNED32;
+	co_unsigned32_t val = 42;
+
+	co_unsigned32_t ac = 0;
+	co_sdo_req_up_val(req, type, &val, &ac);
+	return ac;
 }
 /* USER CODE END 4 */
 
