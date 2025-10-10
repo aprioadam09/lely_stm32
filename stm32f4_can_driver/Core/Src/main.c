@@ -23,6 +23,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "can.h"
+#include "sdev.h"
+#include <lely/co/dev.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
