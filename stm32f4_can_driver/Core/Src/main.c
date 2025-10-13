@@ -67,6 +67,8 @@ static co_unsigned32_t on_dn_2000_00(co_sub_t *sub, struct co_sdo_req *req,
 		void *data);
 static co_unsigned32_t on_up_2001_00(const co_sub_t *sub,
 		struct co_sdo_req *req, void *data);
+static co_unsigned32_t on_dn_led_control(co_sub_t *sub,
+		struct co_sdo_req *req, void *data);
 
 /* USER CODE END PFP */
 
@@ -136,6 +138,9 @@ int main(void)
   // Register our custom functions to be called on SDO access to specific objects.
   co_sub_set_dn_ind(co_dev_find_sub(dev, 0x2000, 0x00), &on_dn_2000_00, NULL);
   co_sub_set_up_ind(co_dev_find_sub(dev, 0x2001, 0x00), &on_up_2001_00, NULL);
+
+  // Register the download indication function for the LED control object.
+  co_sub_set_dn_ind(co_dev_find_sub(dev, 0x2100, 0x00), &on_dn_led_control, NULL);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -522,6 +527,39 @@ static co_unsigned32_t on_up_2001_00(const co_sub_t *sub, struct co_sdo_req *req
 
 	co_unsigned32_t ac = 0;
 	co_sdo_req_up_val(req, type, &val, &ac);
+	return ac;
+}
+
+/**
+ * @brief SDO download indication function for the LED control object (0x2100).
+ *        This function is also triggered when a mapped RPDO updates the object.
+ * @note  Mirrors the LPC project, adapted for STM32 HAL and three LEDs.
+ */
+static co_unsigned32_t on_dn_led_control(co_sub_t *sub, struct co_sdo_req *req, void *data)
+{
+	(void)data; // Unused parameter
+	co_unsigned32_t ac = 0;
+	co_unsigned16_t type = co_sub_get_type(sub);
+	union co_val val;
+
+	// This function extracts the value from the SDO/PDO request.
+	if (co_sdo_req_dn_val(req, type, &val, &ac) == -1)
+		return ac;
+
+	// Control the LEDs based on the received 8-bit value.
+	// HAL_GPIO_WritePin takes GPIO_PIN_SET (HIGH) to turn LED ON (for this board).
+	// We will map:
+	// Bit 0 -> Green LED (PD12)
+	// Bit 1 -> Orange LED (PD13)
+	// Bit 2 -> Red LED (PD14)
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_12, (val.u8 & 0x01) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, (val.u8 & 0x02) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_14, (val.u8 & 0x04) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+
+	// Write the new value to the local object dictionary.
+	co_sub_dn(sub, &val);
+
+	co_val_fini(type, &val);
 	return ac;
 }
 /* USER CODE END 4 */
