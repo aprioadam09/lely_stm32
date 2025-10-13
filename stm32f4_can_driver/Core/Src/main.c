@@ -27,6 +27,7 @@
 #include <lely/can/net.h>
 #include <lely/co/nmt.h>
 #include <lely/co/sdo.h>
+#include <lely/co/tpdo.h>
 #include <lely/co/time.h>
 
 #include <time.h>
@@ -51,7 +52,7 @@
 CAN_HandleTypeDef hcan1;
 
 /* USER CODE BEGIN PV */
-
+static int last_button_state = 1; // 1 = Released (GPIO_PIN_SET)
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -159,6 +160,40 @@ int main(void)
 	  if (can_recv(&msg, 1)) {
 		  // If a message is received, pass it to the Lely stack for processing.
 		  can_net_recv(net, &msg);
+	  }
+
+	  // Read the current state of the user button (PA0).
+	  // Note: Button pressed = pin is LOW (GPIO_PIN_RESET).
+	  int current_button_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+
+	  // Check if there is a change from the last stable state.
+	  if (current_button_state != last_button_state)
+	  {
+		  // Wait for a short time to debounce the mechanical switch.
+		  HAL_Delay(50); // 50ms delay for debouncing
+
+		  // Read the state again after the delay.
+		  current_button_state = HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0);
+
+		  // If the state is still different, it's a valid press/release.
+		  if (current_button_state != last_button_state)
+		  {
+			  last_button_state = current_button_state;
+
+			  // Convert GPIO state to our application logic value (1=pressed, 0=released)
+			  uint8_t od_value = (current_button_state == GPIO_PIN_RESET) ? 1 : 0;
+
+			  // Find the button object (0x2110) in our Object Dictionary.
+			  co_sub_t *sub = co_dev_find_sub(dev, 0x2110, 0x00);
+			  if (sub) {
+				  // Update the value in the local Object Dictionary.
+				  co_sub_set_val_u8(sub, od_value);
+
+				  // Trigger a TPDO event for this object.
+				  // Lely will check if this object is mapped to a TPDO and send it.
+				  co_dev_tpdo_event(dev, 0x2110, 0x00);
+			  }
+		  }
 	  }
   }
   /* USER CODE END 3 */
