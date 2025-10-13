@@ -27,6 +27,9 @@
 #include <lely/can/net.h>
 #include <lely/co/nmt.h>
 #include <lely/co/sdo.h>
+#include <lely/co/time.h>
+
+#include <time.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -57,6 +60,8 @@ static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
 /* USER CODE BEGIN PFP */
 static int on_can_send(const struct can_msg *msg, void *data);
+static void on_nmt_cs(co_nmt_t *nmt, co_unsigned8_t cs, void *data);
+static void on_time(co_time_t *time, const struct timespec *tp, void *data);
 static co_unsigned32_t on_dn_2000_00(co_sub_t *sub, struct co_sdo_req *req,
 		void *data);
 static co_unsigned32_t on_up_2001_00(const co_sub_t *sub,
@@ -121,6 +126,12 @@ int main(void)
   // Start the NMT service by resetting the node (triggers boot-up message).
   co_nmt_cs_ind(nmt, CO_NMT_CS_RESET_NODE);
 
+  // Set the NMT indication function to handle commands from the master.
+  co_nmt_set_cs_ind(nmt, &on_nmt_cs, NULL);
+
+  // Set the TIME indication function.
+  co_time_set_ind(co_nmt_get_time(nmt), &on_time, NULL);
+
   // Register our custom functions to be called on SDO access to specific objects.
   co_sub_set_dn_ind(co_dev_find_sub(dev, 0x2000, 0x00), &on_dn_2000_00, NULL);
   co_sub_set_up_ind(co_dev_find_sub(dev, 0x2001, 0x00), &on_up_2001_00, NULL);
@@ -133,6 +144,15 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  // Update the Lely stack's internal clock.
+	  // HAL_GetTick() returns milliseconds since startup.
+	  uint32_t ms = HAL_GetTick();
+	  struct timespec now;
+	  // Convert milliseconds to a timespec struct (seconds and nanoseconds)
+	  now.tv_sec = ms / 1000;
+	  now.tv_nsec = (ms % 1000) * 1000000;
+	  can_net_set_time(net, &now);
+
 	  struct can_msg msg;
 
 	  // Continuously check our driver's buffer for new messages.
@@ -379,6 +399,47 @@ static int on_can_send(const struct can_msg *msg, void *data)
 {
 	(void)data; // Suppress unused parameter warning
 	return (can_send(msg, 1) == 1) ? 0 : -1;
+}
+
+/**
+ * @brief NMT command service indication function.
+ * @note  Mirrors the LPC project, but replaces exit(0) with a HAL_NVIC_SystemReset().
+ */
+static void on_nmt_cs(co_nmt_t *nmt, co_unsigned8_t cs, void *data)
+{
+	(void)data;
+	(void)nmt; // Suppress unused parameter warning for now
+
+	switch (cs) {
+	case CO_NMT_CS_START:
+		// Logic for 'Start' command can be added here.
+		break;
+	case CO_NMT_CS_STOP:
+		// Logic for 'Stop' command can be added here.
+		break;
+	case CO_NMT_CS_ENTER_PREOP:
+		// Logic for 'Enter Pre-Operational' can be added here.
+		break;
+	case CO_NMT_CS_RESET_NODE:
+		// Perform a software reset of the microcontroller.
+		HAL_NVIC_SystemReset();
+		break;
+	case CO_NMT_CS_RESET_COMM:
+		// Logic for 'Reset Communication' can be added here.
+		break;
+	}
+}
+
+/**
+ * @brief TIME stamp service indication function.
+ * @note  This is a placeholder, as the Discovery board does not have a
+ *        battery-backed Real-Time Clock to be set.
+ */
+static void on_time(co_time_t *time, const struct timespec *tp, void *data)
+{
+	(void)time;
+	(void)tp;
+	(void)data;
 }
 
 /**
